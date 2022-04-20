@@ -1,0 +1,16 @@
+.App {
+  position: relative;
+  border: 10px solid black;
+  background: white;
+}
+
+.App > canvas {
+  margin: 0 auto;
+}
+
+.App .FPS {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: white;
+}
