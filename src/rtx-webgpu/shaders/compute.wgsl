@@ -2,8 +2,9 @@ let infinity = 1e20;
 let lambertian = 1u;
 let metal = 2u;
 let dielectric = 3u;
+let difuseLight = 4u;
 
-let MATERIAL_DATA_SIZE = 6u;
+let MATERIAL_DATA_SIZE = 5u;
 let SPHERE_DATA_SIZE = 5u;
 
 struct ColorBuffer {
@@ -13,7 +14,46 @@ struct ColorBuffer {
 struct Uniforms {
   screenWidth: f32;
   screenHeight: f32;
+  frameIndex: u32;
 };
+
+fn pixel_coords_f(pixelId: vec3<u32>) -> PixelCoords {
+    let y = f32(pixelId.x) / uniforms.screenWidth;
+    let x = f32(pixelId.x) % uniforms.screenWidth;
+
+    return PixelCoords(x, y);
+}
+
+fn pixel_coords_u(pixelId: vec3<u32>) -> PixelCoordsU {
+    let y = pixelId.x / u32(uniforms.screenWidth);
+    let x = pixelId.x % u32(uniforms.screenWidth);
+
+    return PixelCoordsU(x, y);
+}
+
+fn sample_pixel(pixel: PixelCoords, sampleIndex: u32) -> PixelCoords {
+  return PixelCoords(
+    (pixel.x + rand(vec2<f32>(pixel.x, pixel.y) * f32(sampleIndex))),
+    (pixel.y + rand(vec2<f32>(pixel.x, pixel.y) * f32(sampleIndex)))
+  );
+}
+
+fn color_pixel(pixel: PixelCoordsU, color: Color, samplesPerPixel: u32) {
+  let pixelID = u32(pixel.x + (pixel.y * u32(uniforms.screenWidth))) * 3u;
+
+  var r = color[0];
+  var g = color[1];
+  var b = color[2];
+
+  let scale = 1.0 / f32(samplesPerPixel);
+  r = sqrt(r * scale);
+  g = sqrt(g * scale);
+  b = sqrt(b * scale);
+
+  outputColorBuffer.values[pixelID + 0u] = clamp(r, 0.0, 0.999);
+  outputColorBuffer.values[pixelID + 1u] = clamp(g, 0.0, 0.999);
+  outputColorBuffer.values[pixelID + 2u] = clamp(b, 0.0, 0.999);
+}
 
 struct WorldBuffer {
   values: array<f32>;
@@ -28,6 +68,11 @@ struct PixelCoords {
   y: f32;
 };
 
+struct PixelCoordsU {
+  x: u32;
+  y: u32;
+};
+
 type p3 = vec3<f32>;
 type v3 = vec3<f32>;
 type Color = vec3<f32>;
@@ -36,10 +81,12 @@ fn v3_len_sqr(p: v3) -> f32 {
    return p[0] * p[0] + p[1] * p[1] + p[2] * p[2];
 }
 
-fn rand(pixel: vec2<f32>) -> f32 {
-  //return fract(sin(dot(pixel, vec2<f32>(127.1, 311.7)))*43758.5453123);
-  // return fract(sin(dot(pixel, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+fn v3_near_zero(v: v3) -> bool {
+  let s = 1e-8;
+  return (abs(v[0]) < s) && (abs(v[1]) < s) && (abs(v[2]) < s);
+}
 
+fn rand(pixel: vec2<f32>) -> f32 {
   var p3 = fract(pixel * .1031);
   p3 = p3 + dot(p3, p3 + 33.33);
   return fract((p3.x + p3.y) * p3.x);
@@ -50,26 +97,13 @@ fn rand_between(pixel: vec2<f32>, min: f32, max: f32) -> f32 {
   return min + rand(pixel) * delta;
 }
 
-fn random_v3_unit(pixel: vec2<f32>, sampleIndex: u32) -> v3 {
-  return normalize(v3(
-    rand_between(pixel * 1.0, -1.0, 1.0),
-    rand_between(pixel * 2.0, -1.0, 1.0),
-    rand_between(pixel * 3.0, -1.0, 1.0)
-  ));
-}
+fn random_in_unit_sphere(pixel: vec2<f32>, sampleIndex: u32) -> v3 {
+  var r = v3(
+    rand_between(pixel * f32(sampleIndex) * 1.0, -1.0, 1.0),
+    rand_between(pixel * f32(sampleIndex) * 2.0, -1.0, 1.0),
+    rand_between(pixel * f32(sampleIndex) * 3.0, -1.0, 1.0)
+  );
 
-fn random_in_hemisphere(pixel: vec2<f32>, sampleIndex: u32, normal: v3) -> v3 {
-  var r = random_v3_unit(pixel, sampleIndex);
-
-  if (dot(r, normal) > 0.0) {
-    return r;
-  }
-
-  return -r;
-}
-
-fn random_in_disk(pixel: vec2<f32>, sampleIndex: u32) -> v3 {
-  var r = random_v3_unit(pixel, sampleIndex);
   var loopLimit = 50u;
   loop {
     if (loopLimit <= 0u) {
@@ -78,6 +112,42 @@ fn random_in_disk(pixel: vec2<f32>, sampleIndex: u32) -> v3 {
     if (v3_len_sqr(r) < 1.0) {
       break;
     }
+
+    r = v3(
+      rand_between(pixel * f32(sampleIndex) * f32(loopLimit + 5u), -1.0, 1.0),
+      rand_between(pixel * f32(sampleIndex) * f32(loopLimit + 6u), -1.0, 1.0),
+      rand_between(pixel * f32(sampleIndex) * f32(loopLimit + 7u), -1.0, 1.0)
+    );
+
+    loopLimit = loopLimit - 1u;
+  }
+
+  return r;
+}
+
+fn random_in_hemisphere(pixel: vec2<f32>, sampleIndex: u32, normal: v3) -> v3 {
+  var r = random_in_unit_sphere(pixel, sampleIndex);
+
+  if (dot(r, normal) > 0.0) {
+    return r;
+  }
+
+  return -r;
+}
+
+fn random_in_unit_disk(pixel: vec2<f32>, sampleIndex: u32) -> v3 {
+  var r = random_in_unit_sphere(pixel, sampleIndex);
+
+  var loopLimit = 50u;
+  loop {
+    if (loopLimit <= 0u) {
+      break;
+    }
+    if (v3_len_sqr(r) < 1.0) {
+      break;
+    }
+
+    r = random_in_unit_sphere(pixel * f32(loopLimit), sampleIndex);
 
     loopLimit = loopLimit - 1u;
   }
@@ -120,7 +190,7 @@ fn camera_get_ray(camera: Camera, pixel: PixelCoords, sampleIndex: u32) -> Ray {
   let lowerLeftCorner = origin - horizontal / 2.0 - vertical / 2.0 - camera.focusDistance * w;
   let lensRadius = camera.aperture / 2.0;
 
-  let rd = lensRadius * random_in_disk(vec2<f32>(pixel.x, pixel.y), sampleIndex + 10u);
+  let rd = lensRadius * random_in_unit_disk(vec2<f32>(pixel.x, pixel.y), sampleIndex + 10u);
   let offset = u * rd[0] + v * rd[1];
 
   let s = f32(pixel.x);
@@ -135,7 +205,6 @@ fn camera_get_ray(camera: Camera, pixel: PixelCoords, sampleIndex: u32) -> Ray {
 struct Material {
   scatterType: u32;
   color: Color;
-  fuzz: f32;
   indexOfRefraction: f32;
 };
 
@@ -161,7 +230,7 @@ fn init_hit_record() -> HitRecord {
     v3(0.0, 0.0, 0.0),
     0.0,
     false,
-    Material(lambertian, Color(0.0, 0.0, 0.0), 0.0, 0.0)
+    Material(lambertian, Color(0.0, 0.0, 0.0), 0.0)
   );
 }
 
@@ -170,37 +239,6 @@ struct Sphere {
   radius: f32;
   material: Material;
 };
-
-fn pixel_coords(pixelId: vec3<u32>) -> PixelCoords {
-    let y = f32(pixelId.x) / uniforms.screenWidth;
-    let x = f32(pixelId.x) % uniforms.screenWidth;
-
-    return PixelCoords(x, y);
-}
-
-fn sample_pixel(pixel: PixelCoords, sampleIndex: u32) -> PixelCoords {
-  return PixelCoords(
-    (pixel.x + rand(vec2<f32>(pixel.x, pixel.y) * f32(sampleIndex))),
-    (pixel.y + rand(vec2<f32>(pixel.x, pixel.y) * f32(sampleIndex)))
-  );
-}
-
-fn color_pixel(pixel: PixelCoords, color: Color, samplesPerPixel: u32) {
-  let pixelID = u32(u32(pixel.x) + (u32(pixel.y) * u32(uniforms.screenWidth))) * 3u;
-
-  var r = color[0];
-  var g = color[1];
-  var b = color[2];
-
-  let scale = 1.0 / f32(samplesPerPixel);
-  r = sqrt(r * scale);
-  g = sqrt(g * scale);
-  b = sqrt(b * scale);
-
-  outputColorBuffer.values[pixelID + 0u] = clamp(r, 0.0, 0.999);
-  outputColorBuffer.values[pixelID + 1u] = clamp(g, 0.0, 0.999);
-  outputColorBuffer.values[pixelID + 2u] = clamp(b, 0.0, 0.999);
-}
 
 fn hit_sphere(sphere: Sphere, ray: Ray, tMin: f32, tMax: f32) -> HitRecord {
   var hit = init_hit_record();
@@ -265,8 +303,7 @@ fn hit_world(ray: Ray, tMin: f32, tMax: f32) -> HitRecord {
         world.values[materialDataIndex + 2u],
         world.values[materialDataIndex + 3u]
       ),
-      world.values[materialDataIndex + 4u],
-      world.values[materialDataIndex + 5u]
+      world.values[materialDataIndex + 4u]
     );
 
     let sphere = Sphere(
@@ -289,11 +326,6 @@ fn hit_world(ray: Ray, tMin: f32, tMax: f32) -> HitRecord {
   return hit;
 }
 
-fn vec3_near_zero(v: v3) -> bool {
-  let s = 1e-8;
-  return (abs(v[0]) < s) && (abs(v[1]) < s) && (abs(v[2]) < s);
-}
-
 struct ScatterResult {
   scattered: bool;
   ray: Ray;
@@ -301,11 +333,13 @@ struct ScatterResult {
 };
 
 fn scatter(ray: Ray, hit: HitRecord, pixel: PixelCoords, sampleIndex: u32) -> ScatterResult {
+  let rayDirectionNormal = normalize(ray.direction);
+
   if (hit.material.scatterType == lambertian) {
       var scatterDirection = hit.normal + random_in_hemisphere(vec2<f32>(pixel.x, pixel.y), sampleIndex, hit.normal);
 
       // Catch degenerate scatter direction
-      if (vec3_near_zero(scatterDirection)) {
+      if (v3_near_zero(scatterDirection)) {
         scatterDirection = hit.normal;
       }
 
@@ -316,15 +350,14 @@ fn scatter(ray: Ray, hit: HitRecord, pixel: PixelCoords, sampleIndex: u32) -> Sc
       );
   }
   else if (hit.material.scatterType == metal) {
-    let reflected = reflect(normalize(ray.direction), hit.normal);
-    let scatteredRay = Ray(hit.p, reflected + random_v3_unit(vec2<f32>(pixel.x, pixel.y), sampleIndex + 10u) * hit.material.fuzz);
-    if (dot(scatteredRay.direction, hit.normal) > 0.0) {
-      return ScatterResult(
-        true,
-        scatteredRay,
-        hit.material.color
-      );
-    }
+    let reflected = reflect(rayDirectionNormal, hit.normal);
+    let scatteredRay = Ray(hit.p, reflected * random_in_unit_sphere(vec2<f32>(pixel.x, pixel.y), sampleIndex));
+
+    return ScatterResult(
+      dot(scatteredRay.direction, hit.normal) > 0.0,
+      scatteredRay,
+      hit.material.color
+    );
   }
   else if (hit.material.scatterType == dielectric) {
     var refractionRatio = hit.material.indexOfRefraction;
@@ -332,7 +365,7 @@ fn scatter(ray: Ray, hit: HitRecord, pixel: PixelCoords, sampleIndex: u32) -> Sc
       refractionRatio = 1.0 / refractionRatio;
     }
 
-    let cosTheta = min(dot(-normalize(ray.direction), hit.normal), 1.0);
+    let cosTheta = min(dot(-rayDirectionNormal, hit.normal), 1.0);
     let sinTheta = sqrt(1.0 - cosTheta * cosTheta);
 
     let cannotRefract = refractionRatio * sinTheta > 1.0;
@@ -342,10 +375,10 @@ fn scatter(ray: Ray, hit: HitRecord, pixel: PixelCoords, sampleIndex: u32) -> Sc
       cannotRefract
       || material_reflectance(cosTheta, refractionRatio) > rand(vec2<f32>(pixel.x, pixel.y))
     ) {
-      direction = reflect(normalize(ray.direction), hit.normal);
+      direction = reflect(rayDirectionNormal, hit.normal);
     }
     else {
-      direction = refract(normalize(ray.direction), hit.normal, refractionRatio);
+      direction = refract(rayDirectionNormal, hit.normal, refractionRatio);
     }
 
     return ScatterResult(
@@ -362,69 +395,89 @@ fn scatter(ray: Ray, hit: HitRecord, pixel: PixelCoords, sampleIndex: u32) -> Sc
   );
 }
 
+struct EmitResult {
+  emitted: bool;
+  color: Color;
+};
+
+fn emit(hit: HitRecord) -> EmitResult {
+  if (hit.material.scatterType == difuseLight) {
+    return EmitResult(
+      true,
+      hit.material.color
+    );
+  }
+
+  return EmitResult(
+    false,
+    Color(0.0, 0.0, 0.0)
+  );
+}
+
+struct ColorOperation {
+  operation: u32;
+  color: Color;
+};
+
 fn ray_color(ray: Ray, pixel: PixelCoords, sampleIndex: u32, maxDepth: u32) -> Color {
-  var depth = maxDepth;
-  var stepRay = ray;
-  var hit: HitRecord;
+  var resultingColor = Color(0.0, 0.0, 0.0);
+  var globalAttenuation = Color(1.0, 1.0, 1.0);
 
-  let unitDirection = normalize(ray.direction);
-  let t = 0.5 * (unitDirection.y + 1.0);
-  var color = Color(1.0, 1.0, 1.0) * (1.0 - t) + Color(0.5, 0.7, 1.0) * t;
-
-  loop {
-    if (depth <= 0u) {
-      break;
-    }
-
-    hit = hit_world(stepRay, 0.001, infinity);
+  var currentRay = ray;
+  var rayHop: u32;
+  for (rayHop = 0u; rayHop < maxDepth; rayHop = rayHop + 1u) {
+    let hit = hit_world(currentRay, 0.001, infinity);
 
     if (!hit.hit) {
       break;
     }
 
-    let scatterResult = scatter(ray, hit, pixel, sampleIndex);
-    if (scatterResult.scattered) {
-      stepRay = scatterResult.ray;
-      color = scatterResult.attenuation * color;
+    let emitResult = emit(hit);
+    if (emitResult.emitted) {
+      resultingColor = resultingColor + emitResult.color * globalAttenuation;
     }
-    else {
+
+    let scatterResult = scatter(ray, hit, pixel, sampleIndex);
+    globalAttenuation = scatterResult.attenuation * globalAttenuation;
+    if (!scatterResult.scattered) {
       break;
     }
 
-    depth = depth - 1u;
+    currentRay = scatterResult.ray;
   }
 
-  return color;
+  return resultingColor;
 }
 
 @group(0)
 @binding(0)
-var<storage, write> outputColorBuffer : ColorBuffer;
+var<storage, write> outputColorBuffer: ColorBuffer;
 
 @group(0)
 @binding(1)
-var<uniform> uniforms : Uniforms;
+var<uniform> uniforms: Uniforms;
 
 @group(0)
 @binding(2)
-var<storage> world : WorldBuffer;
+var<storage> world: WorldBuffer;
 
 @group(0)
 @binding(3)
-var<storage> camera : CameraBuffer;
+var<storage> camera: CameraBuffer;
 
 @stage(compute)
-@workgroup_size(256, 1)
+@workgroup_size(256)
 fn compute_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   if (global_id.x >= arrayLength(&outputColorBuffer.values)) {
     return;
   }
 
   let aspectRatio = uniforms.screenWidth / uniforms.screenHeight;
-  let pixel = pixel_coords(global_id);
+  let pixel = pixel_coords_f(global_id);
+  let pixelU = pixel_coords_u(global_id);
 
-  let samplesPerPixel = 5u;
-  let maxDepth = 9u;
+  let samplesPerPixel = 70u;
+  let maxDepth = 20u;
 
   let camera = Camera(
     p3(camera.values[0u], camera.values[1u], camera.values[2u]),
@@ -444,5 +497,5 @@ fn compute_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     color = color + ray_color(ray, samplePixel, sampleIndex, maxDepth);
   }
 
-  color_pixel(pixel, color, samplesPerPixel);
+  color_pixel(pixelU, color, samplesPerPixel);
 }

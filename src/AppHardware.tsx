@@ -14,18 +14,22 @@ import {
 } from './rtx-webgpu';
 
 
-const WIDTH = 912;
-const HEIGHT = 576;
+const WIDTH = 912; // 228 /  456 / 912
+const HEIGHT = 576; // 144 / 288 / 576
 
-faker.seed(4);
+faker.seed(1);
 const world = new World();
 
 let groundMaterial = Material.lambertian(new Color(0.5, 0.5, 0.5));
 world.addMaterial(groundMaterial);
 world.addSphere(new Sphere(new Point( 0.0,  -1000.0,   0.0), 1000.0), groundMaterial);
 
-for (let a = -9; a < 9; a += 3) {
-    for (let b = -9; b < 9; b += 3) {
+let lightMaterial = Material.difuseLight(new Color(4.0, 4.0, 4.0));
+world.addMaterial(lightMaterial);
+world.addSphere(new Sphere(new Point( 0.0,  20.0,   0.0), 3.0), lightMaterial);
+
+for (let a = -3; a <= 3; a += 3) {
+    for (let b = -3; b <= 3; b += 3) {
         let materialType = faker.datatype.number({ min: 1, max: 10 });
         let color = new Color(
             faker.datatype.float({ min: 0, max: 1, precision: 0.1 }),
@@ -38,10 +42,7 @@ for (let a = -9; a < 9; a += 3) {
             material = Material.lambertian(color);
         }
         else if (materialType < 8) {
-            material = Material.metal(
-                color,
-                faker.datatype.float({ min: 0, max: 0.5, precision: 0.1 })
-            );
+            material = Material.metal(color);
         }
         else {
             material = Material.dielectric(
@@ -90,6 +91,7 @@ export default function App() {
             let frameCursor = 0;
             let numFrames = 0;
             const maxFrames = 20;
+            let frameIndex = 0;
 
             const render = (now: number) => {
                 now *= 0.001;
@@ -112,7 +114,11 @@ export default function App() {
                     fpsElement.current.textContent += ' / ' + averageFPS.toFixed(1);
                 }
 
-                renderer.render();
+                renderer.render(frameIndex);
+                frameIndex += 1;
+                if (frameIndex > Number.MAX_SAFE_INTEGER) {
+                    frameIndex = 0;
+                }
                 animationFrame = requestAnimationFrame(render);
             };
 

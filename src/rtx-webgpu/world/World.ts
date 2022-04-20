@@ -12,7 +12,8 @@ const MATERIAL_TYPE_MAP: {
 } = {
     lambertian: 1,
     metal: 2,
-    dielectric: 3
+    dielectric: 3,
+    difuse_light: 4
 };
 
 export class World {
@@ -55,17 +56,19 @@ export class World {
 
             if (material.scatterType === 'lambertian') {
                 data.push(material.color!.r, material.color!.g, material.color!.b);
-                data.push(0.0, 0.0);
+                data.push(0.0);
             }
             else if (material.scatterType === 'metal') {
                 data.push(material.color!.r, material.color!.g, material.color!.b);
-                data.push(material.fuzz!);
                 data.push(0.0);
             }
             else if (material.scatterType === 'dielectric') {
                 data.push(0.0, 0.0, 0.0);
-                data.push(0.0);
                 data.push(material.indexOfRefraction!);
+            }
+            else if (material.scatterType === 'difuse_light') {
+                data.push(material.color!.r, material.color!.g, material.color!.b);
+                data.push(0.0);
             }
         }
 

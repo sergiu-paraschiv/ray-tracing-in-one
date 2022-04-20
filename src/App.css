@@ -6,6 +6,7 @@
 
 .App > canvas {
   margin: 0 auto;
+  zoom: 1; /* 4 / 2 / 1 */
 }
 
 .App .FPS {

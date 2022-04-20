@@ -1,18 +1,16 @@
 import { Color } from './Color';
 
 
-export type ScatterType = 'lambertian' | 'metal' | 'dielectric'
+export type ScatterType = 'lambertian' | 'metal' | 'dielectric' | 'difuse_light'
 
 export class Material {
     public readonly scatterType: ScatterType;
     public readonly color?: Color;
-    public readonly fuzz?: number;
     public readonly indexOfRefraction?: number;
 
-    constructor(scatterType: ScatterType, color?: Color, fuzz?: number, indexOfRefraction?: number) {
+    constructor(scatterType: ScatterType, color?: Color, indexOfRefraction?: number) {
         this.scatterType = scatterType;
         this.color = color;
-        this.fuzz = fuzz;
         this.indexOfRefraction = indexOfRefraction;
     }
 
@@ -23,11 +21,10 @@ export class Material {
         );
     }
 
-    public static metal(color: Color, fuzz: number) {
+    public static metal(color: Color) {
         return new Material(
             'metal',
-            color,
-            fuzz
+            color
         );
     }
 
@@ -35,8 +32,14 @@ export class Material {
         return new Material(
             'dielectric',
             undefined,
-            undefined,
             indexOfRefraction
+        );
+    }
+
+    public static difuseLight(color: Color) {
+        return new Material(
+            'difuse_light',
+            color
         );
     }
 }

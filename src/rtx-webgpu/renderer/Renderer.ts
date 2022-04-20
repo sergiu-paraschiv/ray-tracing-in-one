@@ -16,7 +16,7 @@ export class Renderer {
     private readonly height: number;
     private context: GPUCanvasContext | undefined;
     private device: GPUDevice | undefined;
-    private addComputePass: ((commandEncoder: GPUCommandEncoder) => void) | undefined;
+    private addComputePass: ((commandEncoder: GPUCommandEncoder, frameIndex: number) => void) | undefined;
     private addFullscreenPass: ((commandEncoder: GPUCommandEncoder) => void) | undefined;
 
     public constructor(width: number, height: number, world: World, camera: Camera) {
@@ -68,14 +68,14 @@ export class Renderer {
         this.addFullscreenPass = addFullscreenPass;
     }
 
-    public render = () => {
+    public render = (frameIndex: number) => {
         if (!this.device || !this.context || !this.addComputePass || !this.addFullscreenPass) {
             throw new Error('Renderer::init must be called first');
         }
 
         const commandEncoder = this.device.createCommandEncoder();
 
-        this.addComputePass(commandEncoder);
+        this.addComputePass(commandEncoder, frameIndex);
         this.addFullscreenPass(commandEncoder);
 
         this.device.queue.submit([
@@ -94,7 +94,7 @@ export class Renderer {
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
         });
 
-        const UBOBufferSize = 4 * 2;// screen width & height
+        const UBOBufferSize = 4 * 3;// screen width & height + frame index
         const UBOBuffer = this.device.createBuffer({
             size: UBOBufferSize,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -188,18 +188,15 @@ export class Renderer {
             }
         });
 
-        const addComputePass = (commandEncoder: GPUCommandEncoder) => {
+        const addComputePass = (commandEncoder: GPUCommandEncoder, frameIndex: number) => {
             if (!this.device) {
                 throw new Error('Renderer::init must be called first');
             }
 
-            // Write values to uniform buffer object
-            const uniformData = [ this.width, this.height ];
-            const uniformTypedArray = new Float32Array(uniformData);
-            this.device.queue.writeBuffer(UBOBuffer, 0, uniformTypedArray.buffer);
-
+            const uniformTypedArray = new Float32Array([ this.width, this.height, frameIndex ]);
             cameraData = this.camera.getBuffer();
 
+            this.device.queue.writeBuffer(UBOBuffer, 0, uniformTypedArray.buffer);
             this.device.queue.writeBuffer(WorldBuffer, 0, worldData.values);
             this.device.queue.writeBuffer(CameraBuffer, 0, cameraData.values);
 
@@ -297,7 +294,8 @@ export class Renderer {
             this.device.queue.writeBuffer(
                 uniformBuffer,
                 0,
-                new Float32Array([this.width, this.height]));
+                new Float32Array([this.width, this.height])
+            );
 
             const passEncoder = commandEncoder.beginRenderPass({
                 colorAttachments: [
