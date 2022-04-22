@@ -9,24 +9,138 @@ import {
     Material,
     Color,
     Sphere,
+    Triangle,
     Point,
     Camera
 } from './rtx-webgpu';
 
 
-const WIDTH = 912; // 228 /  456 / 912
-const HEIGHT = 576; // 144 / 288 / 576
+const WIDTH = 500; // 228 /  456 / 912
+const HEIGHT = 500; // 144 / 288 / 576
+
+
+
+const camera = new Camera(
+    new Point(0, 0, -11),
+    new Point(0, 0, 0),
+    40.0,
+    0.15,
+    5.0
+);
+
 
 faker.seed(1);
 const world = new World();
 
+const white = Material.lambertian(new Color(0.73, 0.73, 0.73));
+world.addMaterial(white);
+
+const red = Material.lambertian(new Color(0.65, 0.05, 0.05));
+world.addMaterial(red);
+
+const green = Material.lambertian(new Color(0.12, 0.45, 0.15));
+world.addMaterial(green);
+
+const light = Material.difuseLight(new Color(15, 15, 15));
+world.addMaterial(light);
+
+const blue = Material.lambertian(new Color(0.12, 0.15, 0.45));
+world.addMaterial(blue);
+
+const glass = Material.dielectric(1.5);
+world.addMaterial(glass);
+
+// floor
+world.addObject(new Triangle(
+    new Point(3, -3, -3),
+    new Point(-3, -3, 3),
+    new Point(3, -3, 3)
+), white);
+world.addObject(new Triangle(
+    new Point(3, -3, -3),
+    new Point(-3, -3, -3),
+    new Point(-3, -3, 3)
+), white);
+
+// back wall
+world.addObject(new Triangle(
+    new Point(3, -3, 3),
+    new Point(-3, -3, 3),
+    new Point(-3, 3, 3)
+), white);
+world.addObject(new Triangle(
+    new Point(3, -3, 3),
+    new Point(-3, 3, 3),
+    new Point(3, 3, 3)
+), white);
+
+// left wall
+world.addObject(new Triangle(
+    new Point(3, -3, -3),
+    new Point(3, -3, 3),
+    new Point(3, 3, 3)
+), red);
+world.addObject(new Triangle(
+    new Point(3, -3, -3),
+    new Point(3, 3, 3),
+    new Point(3, 3, -3)
+), red);
+
+// right wall
+world.addObject(new Triangle(
+    new Point(-3, -3, -3),
+    new Point(-3, 3, 3),
+    new Point(-3, -3, 3)
+), green);
+world.addObject(new Triangle(
+    new Point(-3, -3, -3),
+    new Point(-3, 3, -3),
+    new Point(-3, 3, 3)
+), green);
+
+// ceiling
+world.addObject(new Triangle(
+    new Point(3, 3, -3),
+    new Point(3, 3, 3),
+    new Point(-3, 3, 3)
+), white);
+world.addObject(new Triangle(
+    new Point(3, 3, -3),
+    new Point(-3, 3, 3),
+    new Point(-3, 3, -3)
+), white);
+
+
+// light
+world.addObject(new Triangle(
+    new Point(1, 2.999, -1),
+    new Point(1, 2.999, 1),
+    new Point(-1, 2.999, 1)
+), light);
+world.addObject(new Triangle(
+    new Point(1, 2.999, -1),
+    new Point(-1, 2.999, 1),
+    new Point(-1, 2.999, -1)
+), light);
+
+world.addObject(new Sphere(
+    new Point(0, 0, 0),
+    1.0
+), blue);
+
+world.addObject(new Sphere(
+    new Point(0, 0, 0),
+    1.1
+), glass);
+
+/*
 let groundMaterial = Material.lambertian(new Color(0.5, 0.5, 0.5));
 world.addMaterial(groundMaterial);
-world.addSphere(new Sphere(new Point( 0.0,  -1000.0,   0.0), 1000.0), groundMaterial);
+world.addObject(new Sphere(new Point( 0.0,  -1000.0,   0.0), 1000.0), groundMaterial);
 
 let lightMaterial = Material.difuseLight(new Color(4.0, 4.0, 4.0));
 world.addMaterial(lightMaterial);
-world.addSphere(new Sphere(new Point( 0.0,  20.0,   0.0), 3.0), lightMaterial);
+world.addObject(new Sphere(new Point( 0.0,  20.0,   0.0), 3.0), lightMaterial);
 
 for (let a = -3; a <= 3; a += 3) {
     for (let b = -3; b <= 3; b += 3) {
@@ -38,10 +152,10 @@ for (let a = -3; a <= 3; a += 3) {
         );
 
         let material: Material;
-        if (materialType < 6) {
+        if (materialType < 3) {
             material = Material.lambertian(color);
         }
-        else if (materialType < 8) {
+        else if (materialType < 9) {
             material = Material.metal(color);
         }
         else {
@@ -50,7 +164,7 @@ for (let a = -3; a <= 3; a += 3) {
             );
         }
 
-        const radius = faker.datatype.float({ min: 0.4, max: 1.2, precision: 0.1 });
+        const radius = faker.datatype.float({ min: 0.7, max: 1.2, precision: 0.1 });
         const center = new Point(
             a + 0.3 * faker.datatype.float({ min: -1, max: 1, precision: 0.1 }),
             radius,
@@ -58,17 +172,10 @@ for (let a = -3; a <= 3; a += 3) {
         );
 
         world.addMaterial(material);
-        world.addSphere(new Sphere(center, radius), material);
+        world.addObject(new Sphere(center, radius), material);
     }
 }
-
-const camera = new Camera(
-    new Point(5.0, 2.0, 3.0),
-    new Point(0.0, 0.0, 0.0),
-    90.0,
-    0.1,
-    5.0
-);
+*/
 
 const renderer = new Renderer(
     WIDTH,
@@ -84,7 +191,7 @@ export default function App() {
     React.useEffect(() => {
         let animationFrame: ReturnType<typeof requestAnimationFrame> | undefined;
 
-        if (fpsElement.current && initialized) {
+        if (initialized) {
             let then = 0;
             let totalFPS = 0;
             const frameTimes: number[] = [];
@@ -130,7 +237,7 @@ export default function App() {
                 cancelAnimationFrame(animationFrame);
             }
         };
-    }, [ fpsElement.current, initialized ]);
+    }, [ fpsElement, initialized ]);
 
     React.useEffect(() => {
         let mouseDown = false;

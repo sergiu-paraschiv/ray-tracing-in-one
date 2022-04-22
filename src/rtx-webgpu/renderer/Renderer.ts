@@ -1,8 +1,7 @@
 // @ts-ignore
-import computeShaderWGSL from '../shaders/compute.wgsl';
-// @ts-ignore
 import fullscreenShaderWGSL from '../shaders/fullscreen.wgsl';
 
+import loadComputeShader from './loadComputeShader';
 import { World } from '../world/World';
 import { Camera } from '../camera/Camera';
 
@@ -54,7 +53,7 @@ export class Renderer {
         });
 
         const computeShaderModule = this.device.createShaderModule({
-            code: computeShaderWGSL
+            code: loadComputeShader()
         });
 
         const fullscreenShaderModule = this.device.createShaderModule({

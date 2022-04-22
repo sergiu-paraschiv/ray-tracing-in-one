@@ -1,9 +1,9 @@
 import { Material, ScatterType } from './Material';
-import { Sphere } from './Sphere';
+import { Object, Sphere, Triangle, isSphere, isTriangle } from './Object';
 
 
-interface SphereMaterial {
-    sphere: Sphere
+interface ObjectMaterial {
+    object: Object
     material: Material
 }
 
@@ -18,8 +18,8 @@ const MATERIAL_TYPE_MAP: {
 
 export class World {
     private materials: Material[] = [];
-    private spheres: Sphere[] = [];
-    private sphereMaterials: SphereMaterial[] = [];
+    private objects: Object[] = [];
+    private objectMaterials: ObjectMaterial[] = [];
     private buffer = new Float32Array();
 
     public getBuffer(): {
@@ -37,16 +37,16 @@ export class World {
         this.materials.push(material);
     }
 
-    public addSphere(sphere: Sphere, material: Material) {
-        this.spheres.push(sphere);
-        this.sphereMaterials.push({ sphere, material });
+    public addObject(object: Object, material: Material) {
+        this.objects.push(object);
+        this.objectMaterials.push({ object, material });
     }
 
     private buildBuffer() {
         const data: number[] = [];
 
         data.push(this.materials.length);
-        data.push(this.spheres.length);
+        data.push(this.objects.length);
 
         const materialDataIndexes: number[] = [];
         for (const material of this.materials) {
@@ -72,15 +72,28 @@ export class World {
             }
         }
 
-        for (const sphere of this.spheres) {
-            data.push(sphere.center.x, sphere.center.y, sphere.center.z, sphere.radius);
-
-            const sphereMaterial = this.sphereMaterials.find(sphereMaterial => sphereMaterial.sphere === sphere);
-            if (!sphereMaterial) {
-                throw new Error('SphereMaterial not found');
+        for (const object of this.objects) {
+            if (isSphere(object)) {
+                data.push(1.0);
+                data.push(object.center.x, object.center.y, object.center.z, object.radius);
+                data.push(0.0, 0.0, 0.0, 0.0, 0.0);
+            }
+            else if (isTriangle(object)) {
+                data.push(2.0);
+                data.push(object.v0.x, object.v0.y, object.v0.z);
+                data.push(object.v1.x, object.v1.y, object.v1.z);
+                data.push(object.v2.x, object.v2.y, object.v2.z);
+            }
+            else {
+                throw new Error('Unknown object type');
             }
 
-            const materialIndex = this.materials.indexOf(sphereMaterial.material);
+            const objectMaterial = this.objectMaterials.find(objectMaterial => objectMaterial.object === object);
+            if (!objectMaterial) {
+                throw new Error('Object Material not found');
+            }
+
+            const materialIndex = this.materials.indexOf(objectMaterial.material);
             data.push(materialDataIndexes[materialIndex]);
         }
 

@@ -7,6 +7,11 @@ struct Uniforms {
   screenHeight: f32;
 };
 
+struct VertexOutput {
+  @builtin(position) Position : vec4<f32>;
+};
+
+
 @group(0)
 @binding(0)
 var<uniform> uniforms : Uniforms;
@@ -14,10 +19,6 @@ var<uniform> uniforms : Uniforms;
 @group(0)
 @binding(1)
 var<storage, read> finalColorBuffer : ColorData;
-
-struct VertexOutput {
-  @builtin(position) Position : vec4<f32>;
-};
 
 @stage(vertex)
 fn vertex_main(@builtin(vertex_index) VertexIndex : u32) -> VertexOutput {
